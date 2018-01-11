@@ -4,15 +4,62 @@ const bodyParser = require('body-parser');
 const express = require('express');
 const morgan = require('morgan');
 const mongoose = require('mongoose');
+const passport = require('passport');
+const { Strategy: LocalStrategy } = require('passport-local');
+
 mongoose.Promise = global.Promise;
 
 const { DATABASE_URL, PORT } = require('./config');
-const { BlogPost,Users } = require('./models');
+const { BlogPost, User } = require('./models');
 
 const app = express();
 
 app.use(morgan('common'));
 app.use(bodyParser.json());
+
+
+
+const localStrategy = new LocalStrategy((username, password, done) => {
+  console.log('strategy is happening');
+  let user;
+  User
+    .findOne({username})
+    .then(results => {
+      user = results;
+      if(!user) {
+        return Promise.reject({
+          reason: 'LoginError',
+          message: 'Incorrect username',
+          location: 'username'
+        });
+      }
+      return user.validatePassword(password);
+    })
+    .then(isValid => {
+      if(!isValid) {
+        return Promise.reject({
+          reason: 'LoginError',
+          message: 'Incorrect password',
+          location: 'password'
+        });
+      }
+      return done(null, user);
+    })
+    .catch(err => {
+      if (err.reason === 'LoginError') {
+        return done(null, false);
+      }
+      return done(err);
+    });
+});
+
+passport.use(localStrategy);
+const localAuth = passport.authenticate('local', {session: false});
+
+
+app.post('/helloWorld', localAuth, (req, res) => {
+  res.send('hello world');
+});
 
 
 app.get('/posts', (req, res) => {
@@ -27,6 +74,7 @@ app.get('/posts', (req, res) => {
     });
 });
 
+
 app.get('/posts/:id', (req, res) => {
   BlogPost
     .findById(req.params.id)
@@ -37,8 +85,10 @@ app.get('/posts/:id', (req, res) => {
     });
 });
 
-app.post('/posts', (req, res) => {
+
+app.post('/posts', localAuth, (req, res) => {
   const requiredFields = ['title', 'content', 'author'];
+  console.log(req.user);
   for (let i = 0; i < requiredFields.length; i++) {
     const field = requiredFields[i];
     if (!(field in req.body)) {
@@ -52,7 +102,10 @@ app.post('/posts', (req, res) => {
     .create({
       title: req.body.title,
       content: req.body.content,
-      author: req.body.author
+      author: {
+        firstName: req.user.firstName,
+        lastName: req.user.lastName
+      }
     })
     .then(blogPost => res.status(201).json(blogPost.serialize()))
     .catch(err => {
@@ -62,51 +115,57 @@ app.post('/posts', (req, res) => {
 
 });
 
+
 app.post('/users', (req,res) => {
   const requiredFields = ['username', 'password', 'firstName', 'lastName'];
   for (let i = 0; i < requiredFields.length; i++) {
-      const field = requiredFields[i];
-      if (!(field in req.body)) {
-        const message = `Missing \`${field}\` in request body`;
-        console.error(message);
-        console.log(req.body.username);
-        return res.status(400).send(message);
-  }}
-  return Users 
-  .find(req.body.username) 
-  .count() 
-  .then(count => { 
-    if (count > 0) { 
-      return Promise.reject({ 
-        code: 422, 
-        reason: 'ValidationError', message: 'Username already taken',
-         location: 'username' 
+    const field = requiredFields[i];
+    if (!(field in req.body)) {
+      const message = `Missing \`${field}\` in request body`;
+      console.error(message);
+      return res.status(400).send(message);
+    }}
+
+  let { username, password, firstName, lastName } = req.body;
+
+  return User 
+    .find({username}) 
+    .count() 
+    .then(count => { 
+      if (count > 0) { 
+        console.log(count);
+        return Promise.reject({ 
+          code: 422, 
+          reason: 'ValidationError', 
+          message: 'Username already taken',
+          location: 'username' 
         }); 
       } 
-   return Users
-   .hashPassword(req.body.password); 
-  }) 
-  .then(digest => { 
-    return Users 
-    .create(
-      { username,
-         password: digest, firstName, lastName 
-      }); 
+      return User
+        .hashPassword(password); 
     }) 
-  .then((user) => {
-    res.status(201).json (
-      user.apiRepr()
-    )
-  })
-  .catch(err => {
-    console.error(err);
+    .then(digest => { 
+      return User 
+        .create(
+          { username,
+            password: digest, 
+            firstName, 
+            lastName 
+          }); 
+    }) 
+    .then((user) => {
+      res.status(201).json (
+        user.apiRepr()
+      );
+    })
+    .catch(err => {
+      console.error(err);
       res.status(500).json({ error: 'something went terribly wrong' });
-  })
-})
+    });
+});
 
 
-
-app.delete('/posts/:id', (req, res) => {
+app.delete('/posts/:id', localAuth, (req, res) => {
   BlogPost
     .findByIdAndRemove(req.params.id)
     .then(() => {
@@ -119,7 +178,7 @@ app.delete('/posts/:id', (req, res) => {
 });
 
 
-app.put('/posts/:id', (req, res) => {
+app.put('/posts/:id', localAuth, (req, res) => {
   if (!(req.params.id && req.body.id && req.params.id === req.body.id)) {
     res.status(400).json({
       error: 'Request path id and request body id values must match'
@@ -141,7 +200,7 @@ app.put('/posts/:id', (req, res) => {
 });
 
 
-app.delete('/:id', (req, res) => {
+app.delete('/:id', localAuth, (req, res) => {
   BlogPost
     .findByIdAndRemove(req.params.id)
     .then(() => {

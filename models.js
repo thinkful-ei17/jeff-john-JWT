@@ -5,7 +5,7 @@ const bcrypt = require('bcryptjs');
 
 mongoose.Promise = global.Promise;
 
-const blogPostSchema = new mongoose.Schema({
+const blogPostSchema = mongoose.Schema({
   author: {
     firstName: String,
     lastName: String
@@ -43,23 +43,24 @@ blogPostSchema.methods.serialize = function () {
   };
 };
 
-UserSchema.statics.hashPassword = password => {
+UserSchema.statics.hashPassword = function(password) {
   return bcrypt.hash(password, 10);
-}
+};
 
-UserSchema.methods.validatePassword = password => {
+UserSchema.methods.validatePassword = function(password) {
   return bcrypt.compare(password, this.password);
-}
+};
 
 UserSchema.methods.apiRepr = function () { 
   return { 
-  username: this.username || '', 
-  firstName: this.firstName || '', lastName: this.lastName || '' }; 
+    username: this.username || '', 
+    firstName: this.firstName || '', 
+    lastName: this.lastName || '' 
+  }; 
 };
-
 
 const BlogPost = mongoose.model('BlogPost', blogPostSchema);
 
-const Users = mongoose.model('users', UserSchema)
+const User = mongoose.model('User', UserSchema);
 
-module.exports = { BlogPost, Users};
+module.exports = { BlogPost, User};
