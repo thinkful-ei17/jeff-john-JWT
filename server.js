@@ -7,7 +7,7 @@ const mongoose = require('mongoose');
 mongoose.Promise = global.Promise;
 
 const { DATABASE_URL, PORT } = require('./config');
-const { BlogPost } = require('./models');
+const { BlogPost,Users } = require('./models');
 
 const app = express();
 
@@ -61,6 +61,49 @@ app.post('/posts', (req, res) => {
     });
 
 });
+
+app.post('/users', (req,res) => {
+  const requiredFields = ['username', 'password', 'firstName', 'lastName'];
+  for (let i = 0; i < requiredFields.length; i++) {
+      const field = requiredFields[i];
+      if (!(field in req.body)) {
+        const message = `Missing \`${field}\` in request body`;
+        console.error(message);
+        console.log(req.body.username);
+        return res.status(400).send(message);
+  }}
+  return Users 
+  .find(req.body.username) 
+  .count() 
+  .then(count => { 
+    if (count > 0) { 
+      return Promise.reject({ 
+        code: 422, 
+        reason: 'ValidationError', message: 'Username already taken',
+         location: 'username' 
+        }); 
+      } 
+   return Users
+   .hashPassword(req.body.password); 
+  }) 
+  .then(digest => { 
+    return Users 
+    .create(
+      { username,
+         password: digest, firstName, lastName 
+      }); 
+    }) 
+  .then((user) => {
+    res.status(201).json (
+      user.apiRepr()
+    )
+  })
+  .catch(err => {
+    console.error(err);
+      res.status(500).json({ error: 'something went terribly wrong' });
+  })
+})
+
 
 
 app.delete('/posts/:id', (req, res) => {
