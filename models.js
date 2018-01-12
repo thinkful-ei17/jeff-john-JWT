@@ -51,7 +51,7 @@ UserSchema.methods.validatePassword = function(password) {
   return bcrypt.compare(password, this.password);
 };
 
-UserSchema.methods.apiRepr = function () { 
+UserSchema.methods.serialize = function () { 
   return { 
     username: this.username || '', 
     firstName: this.firstName || '', 

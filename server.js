@@ -10,12 +10,10 @@ const { Strategy: LocalStrategy } = require('passport-local');
 
 const { Strategy: JwtStrategy, ExtractJwt } = require('passport-jwt');
 
-const { User } = require('../models');
-const { JWT_SECRET } = require('../config');
-
 mongoose.Promise = global.Promise;
 
-const { DATABASE_URL, PORT } = require('./config');
+const { DATABASE_URL, PORT, JWT_EXPIRY, JWT_SECRET } = require('./config');
+
 const { BlogPost, User } = require('./models');
 
 const app = express();
@@ -71,10 +69,19 @@ const jwtStrategy = new JwtStrategy(
   }
 );
 
+const createAuthToken = user => {
+  return jwt.sign({user}, JWT_SECRET, {
+    subject: user.username,
+    expiresIn: JWT_EXPIRY,
+    algorithm: 'HS256'
+  });
+};
+
 passport.use(localStrategy);
 passport.use(jwtStrategy);
 
 const localAuth = passport.authenticate('local', {session: false});
+
 const jwtAuth = passport.authenticate('jwt', {session:false});
 
 app.post('/login', localAuth, (req, res) => {
@@ -82,6 +89,10 @@ app.post('/login', localAuth, (req, res) => {
   res.json({authToken});
 });
 
+app.post('/refresh', jwtAuth, (req, res) => {
+  const authToken = createAuthToken(req.user);
+  res.json({authToken});
+});
 
 app.get('/posts', (req, res) => {
   BlogPost
@@ -176,7 +187,7 @@ app.post('/users', (req,res) => {
     }) 
     .then((user) => {
       res.status(201).json (
-        user.apiRepr()
+        user.serialize()
       );
     })
     .catch(err => {
