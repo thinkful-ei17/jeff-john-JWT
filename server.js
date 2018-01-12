@@ -5,7 +5,13 @@ const express = require('express');
 const morgan = require('morgan');
 const mongoose = require('mongoose');
 const passport = require('passport');
+const jwt = require('jsonwebtoken');
 const { Strategy: LocalStrategy } = require('passport-local');
+
+const { Strategy: JwtStrategy, ExtractJwt } = require('passport-jwt');
+
+const { User } = require('../models');
+const { JWT_SECRET } = require('../config');
 
 mongoose.Promise = global.Promise;
 
@@ -53,12 +59,27 @@ const localStrategy = new LocalStrategy((username, password, done) => {
     });
 });
 
+
+const jwtStrategy = new JwtStrategy(
+  {
+    secretOrKey: JWT_SECRET,
+    jwtFromRequest: ExtractJwt.fromAuthHeaderWithScheme('Bearer'),
+    algorithms: ['HS256']
+  },
+  (payload , done) => {
+    done(null,payload.user);
+  }
+);
+
 passport.use(localStrategy);
+passport.use(jwtStrategy);
+
 const localAuth = passport.authenticate('local', {session: false});
+const jwtAuth = passport.authenticate('jwt', {session:false});
 
-
-app.post('/helloWorld', localAuth, (req, res) => {
-  res.send('hello world');
+app.post('/login', localAuth, (req, res) => {
+  const authToken = createAuthToken(req.user.serialize());
+  res.json({authToken});
 });
 
 
